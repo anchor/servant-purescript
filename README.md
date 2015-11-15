@@ -10,6 +10,7 @@ This library lets you automatically derive Purescript functions (using jQuery's 
 
 Projects that use *servant-purescript* will depend on the following Purescript libraries:
 
+* [purescript-affjax](https://github.com/slamdata/purescript-affjax)
 * [purescript-arrays](https://github.com/purescript/purescript-arrays)
 * [purescript-control](https://github.com/purescript/purescript-control)
 * [purescript-either](https://github.com/purescript/purescript-either)
@@ -87,7 +88,7 @@ currentValue counter = liftIO $ readTVarIO counter
 -- * Our API type
 type TestApi = "counter" :> Post Counter -- endpoint for increasing the counter
           :<|> "counter" :> Get  Counter -- endpoint to get the current value
-          :<|> Raw                       -- used for serving static files 
+          :<|> Raw                       -- used for serving static files
 
 testApi :: Proxy TestApi
 testApi = Proxy
@@ -126,11 +127,11 @@ main = do
     -- Write the PureScript module
     writePS (tmp </> "api.purs") [ incCounterJS
                                  , currentValueJS
-                                 ] 
+                                 ]
 
     -- Run bower to import dependencies
     _ <- system "cd examples && bower install"
-    
+
     (matches, _) <- globDir [compile "examples/bower_components/**/*.purs"] "."
 
     -- Compile PureScript to JS
@@ -144,7 +145,7 @@ main = do
     putStrLn cmd
 
     _ <- system cmd
-    
+
     -- setup a shared counter
     cnt <- newCounter
 
