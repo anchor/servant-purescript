@@ -4,6 +4,7 @@
 
 module Servant.PureScript (
   generatePSModule,
+  generatePSUtilModule,
   generatePS,
   PSSettings(..),
   baseURL,
@@ -23,10 +24,24 @@ import qualified Servant.Foreign as F
 
 -- | PureScript rendering settings
 data PSSettings = PSSettings {
-    _baseURL :: String -- ^ Base URL for AJAX requests
+    _baseURL :: String, -- ^ Base URL for AJAX requests
+    _utilModuleName :: ST  -- ^ module that all generated ajax modules depend on
 }
 
 makeLenses ''PSSettings
+
+generatePSUtilModule :: PSSettings -> (ST, ST)
+generatePSUtilModule settings = (purs, js)
+  where
+    purs = T.unlines
+        [ "module " <> (settings ^. utilModuleName) <> " where"
+        , "foreign import encodeURIComponent :: String -> String"
+        ]
+    js = T.unlines
+        [ "\"use strict\";"
+        , "// module " <> (settings ^. utilModuleName)
+        , "exports.encodeURIComponent = encodeURIComponent;"
+        ]
 
 -- | Given a servant api, generate a PureScript module containing a list of functions for AJAX
 -- requests.
@@ -45,27 +60,12 @@ generatePSModule' settings mname reqs = T.unlines $
         [ "module " <> mname <> " where"
         , ""
         , "import Prelude"
-        , "import Control.Monad.Eff"
-        , "import Data.Foldable"
         , "import Data.Foreign"
-        , "import Data.Foreign.Class"
-        , "import Data.Function"
         , "import Data.Maybe"
-        , "import Data.Monoid"
         , "import Network.HTTP.Affjax"
-        , "import Network.HTTP.RequestHeader"
-        , "import Network.HTTP.Affjax"
-        , "import Network.HTTP.Affjax.Request"
-        , "import Network.HTTP.Affjax.Response"
         , "import Network.HTTP.Method"
-        , "import Network.HTTP.MimeType"
-        , "import Network.HTTP.MimeType.Common"
         , "import Network.HTTP.RequestHeader"
-        , "import Network.HTTP.ResponseHeader"
-        , "import Network.HTTP.StatusCode"
-        , ""
-        , "parseJsonResponse :: forall a. (IsForeign a) => AffjaxResponse String -> AffjaxResponse (F a)"
-        , "parseJsonResponse resp = resp { response = readJSON resp.response }"
+        , "import " <> (settings ^. utilModuleName) <> " (encodeURIComponent)"
         , ""
         , T.intercalate "\n" (generatePS settings <$> reqs)
         ]
@@ -99,6 +99,7 @@ generatePS settings req = ajaxRequest
          <> if null captures then "" else "With"
          <> T.intercalate "And" (fmap capitalise captures)
 
+    queryParams :: [F.QueryArg]
     queryParams = req ^.. F.reqUrl . F.queryStr . traverse
 
     body :: [ST]
@@ -127,23 +128,21 @@ generatePS settings req = ajaxRequest
     ajaxRequest :: ST
     ajaxRequest = T.unlines $
         typeSig :
-        (fname <> argString <> " = parseJsonResponse <$> affjax req") :
-        "  where" :
-        "    req :: AffjaxRequest String" :
-        "        req = defaultRequest" :
-        ("                { method = " <> req ^. F.reqMethod) :
-        ("                , url = " <> urlString) :
-        ("                , headers = " <> wrapHeaders implicitHeaderArgs headerArgs) :
-        ["                , content = Just body" | req ^. F.reqBody] ++
-        "                }" :
+        (fname <> argString <> " = affjax $ defaultRequest") :
+        ("    { method = " <> req ^. F.reqMethod) :
+        ("    , url = " <> urlString) :
+        ("    , headers = " <> wrapHeaders implicitHeaderArgs headerArgs) :
+        ["    , content = Just body" | req ^. F.reqBody] ++
+        "    }" :
         []
       where
+        typeSig :: ST
         typeSig = T.concat
             [ fname
             , " :: forall eff. "
             , T.intercalate " -> " typedArgs
             , if null args then "" else " -> "
-            , "Affjax eff (F Unit)"
+            , "Affjax eff Foreign"
             ]
 
         typedArgs :: [ST]
@@ -186,7 +185,7 @@ psHeaderArg (F.ReplaceHeaderArg n p)
 
 -- | Default PureScript settings: specifies an empty base URL
 defaultSettings :: PSSettings
-defaultSettings = PSSettings ""
+defaultSettings = PSSettings "" "Util"
 
 -- | Capitalise a string for use in PureScript variable name
 capitalise :: (ConvertibleStrings s String, ConvertibleStrings String s) => s -> s
