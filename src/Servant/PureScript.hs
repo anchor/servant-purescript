@@ -30,6 +30,7 @@ data PSSettings = PSSettings {
 
 makeLenses ''PSSettings
 
+-- | (may be obsoleted by https://github.com/purescript/purescript-globals/pull/7 at some point.)
 generatePSUtilModule :: PSSettings -> (ST, ST)
 generatePSUtilModule settings = (purs, js)
   where
